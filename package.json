@@ -1,0 +1,42 @@
+{
+  "name": "@elelem/opencat",
+  "version": "1.0.7",
+  "description": "Remote OpenCode AI Agent Bridge for Slack",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "opencat": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "slack-manifest.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup && chmod +x dist/index.js",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js",
+    "dev": "node --experimental-strip-types --watch src/index.ts"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "opencode",
+    "slack",
+    "ai",
+    "agent",
+    "socket-mode"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@opencode-ai/sdk": "^1.18.32",
+    "@slack/bolt": "^3.21.4",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  }
+}
