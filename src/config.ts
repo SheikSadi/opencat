@@ -6,6 +6,7 @@ import { stdin as input, stdout as output } from "node:process";
 import dotenv from "dotenv";
 
 import { installHandoffSkill, installShellIntegration } from "./skill.ts";
+import { startInteractiveGuide } from "./guide.ts";
 
 // Load local .env if present
 dotenv.config();
@@ -189,21 +190,36 @@ export async function runInteractiveSetup(): Promise<SetupResult> {
   }
 
   const startAnswer = (await rl.question("\n🚀 Would you like to start OpenCat now? (Y/n): ")).trim().toLowerCase();
-  rl.close();
-
   const startNow = startAnswer === "" || startAnswer === "y" || startAnswer === "yes";
 
   if (!startNow) {
+    const guideAnswer = (
+      await rl.question("\n📖 Would you like to explore the interactive guide & cheatsheet? (Y/n): ")
+    )
+      .trim()
+      .toLowerCase();
+    const openGuide = guideAnswer === "" || guideAnswer === "y" || guideAnswer === "yes";
+    if (openGuide) {
+      rl.close();
+      await startInteractiveGuide();
+      return { config: resolvedConfig, startNow: false };
+    }
+
     console.log("\n=======================================================");
     console.log("                   Next Steps                          ");
     console.log("=======================================================");
     console.log("1. Start OpenCat anytime with:");
     console.log("   npx @sheiksadi/opencat\n");
-    console.log("2. In Slack:");
+    console.log("2. Explore interactive commands and features with:");
+    console.log("   npx @sheiksadi/opencat guide\n");
+    console.log("3. In Slack:");
     console.log("   • Send a Direct Message to your bot");
     console.log("   • Or invite it to a channel: /invite @<bot-name>");
-    console.log("   • Send instructions, e.g. 'check git status and run tests'\n");
+    console.log("   • Send instructions, e.g. 'check git status and run tests'");
+    console.log("   • Control execution in thread with: status, stop, todos, reset\n");
   }
+
+  rl.close();
 
   return { config: resolvedConfig, startNow };
 }

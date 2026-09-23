@@ -54,6 +54,16 @@ That's it! Your agent is live and listening on Slack.
 
 ---
 
+## 📖 Interactive CLI Guide & Cheatsheet
+
+Explore all workflows, in-chat controls, and options with the interactive step-by-step menu:
+```bash
+npx @sheiksadi/opencat guide
+```
+*(Aliases: `npx @sheiksadi/opencat how-to` or `npx @sheiksadi/opencat docs`)*
+
+---
+
 ## 💬 How to Use in Slack
 
 - **Mention in channel:** `@OpenCat check git status and run tests`
@@ -95,6 +105,7 @@ npx @sheiksadi/opencat [command] [options]
 | Command | Description |
 |---|---|
 | *(default)* | Start the Slack Socket Mode listener |
+| `guide` | Launch interactive menu guide (aliases: `how-to`, `docs`) |
 | `setup` | Run interactive credentials wizard & install skill/sync |
 | `attach [args]` | Attach PC terminal to the shared OpenCat OpenCode server |
 | `sync` | Enable live terminal sync in `~/.bashrc` / `~/.zshrc` |
@@ -102,6 +113,7 @@ npx @sheiksadi/opencat [command] [options]
 | `handoff [msg]` | Post a Slack notification linked to active PC session |
 | `install-skill` | Install OpenCat handoff skill into OpenCode |
 | `status` | View configured tokens and OpenCode server status |
+| `test` | Run self-test verification suite |
 | `--help`, `-h` | Display help |
 
 ### Options:

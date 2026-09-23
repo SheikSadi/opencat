@@ -9,6 +9,7 @@ import { permissionManager } from "./permissions.ts";
 import { intentInterceptor } from "./interceptor.ts";
 import { executeHandoff } from "./handoff.ts";
 import { installHandoffSkill, installShellIntegration } from "./skill.ts";
+import { startInteractiveGuide, printAllGuide } from "./guide.ts";
 
 export const SLACK_MANIFEST = {
   _metadata: {
@@ -73,6 +74,7 @@ Usage:
 Commands:
   start               Start the Slack Socket Mode listener (default)
   setup               Run the interactive Slack credentials setup wizard
+  guide               Interactive knowledge explorer & usage guide (aliases: how-to, docs)
   manifest            Print the 1-click Slack App Manifest JSON
   attach [args...]    Attach your PC terminal to the shared OpenCat OpenCode server
   sync                Enable live terminal sync in ~/.bashrc / ~/.zshrc
@@ -444,6 +446,15 @@ async function main() {
 
   if (["--help", "-h", "help"].includes(command)) {
     printHelp();
+    process.exit(0);
+  }
+
+  if (["guide", "how-to", "howto", "docs", "usage", "cheatsheet"].includes(command)) {
+    if (args.includes("--all") || !process.stdin.isTTY) {
+      printAllGuide();
+    } else {
+      await startInteractiveGuide();
+    }
     process.exit(0);
   }
 

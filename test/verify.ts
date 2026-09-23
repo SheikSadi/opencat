@@ -6,6 +6,7 @@ import { stateTracker, SessionStateTracker } from "../src/state-tracker.ts";
 import { intentInterceptor } from "../src/interceptor.ts";
 import { permissionManager, PermissionManager } from "../src/permissions.ts";
 import { slackStatusManager, SlackStatusManager } from "../src/slack-status.ts";
+import { GUIDE_TREE, formatTopicContent, type GuideTopic } from "../src/guide.ts";
 
 async function testStateTracker() {
   console.log("🧪 Testing SessionStateTracker event ingestion...");
@@ -191,6 +192,32 @@ async function testPermissionManager() {
   console.log("✅ PermissionManager verified successfully!");
 }
 
+async function testGuideTree() {
+  console.log("🧪 Testing Interactive Guide Tree & Hierarchy...");
+  assert(GUIDE_TREE.children && GUIDE_TREE.children.length >= 7, "Guide tree should have at least 7 main categories");
+
+  // Validate each category and its subtopics
+  let totalTopics = 0;
+  function validateNode(node: GuideTopic, depth = 0) {
+    totalTopics++;
+    assert(node.id, "Topic must have an id");
+    assert(node.title, `Topic ${node.id} must have a title`);
+    if (node.children) {
+      assert(node.children.length > 0, `Topic ${node.id} has empty children array`);
+      for (const child of node.children) {
+        validateNode(child, depth + 1);
+      }
+    } else {
+      assert(node.content && node.content.length > 20, `Leaf topic ${node.id} must have non-empty content`);
+      const formatted = formatTopicContent(node);
+      assert(formatted.includes(node.title.toUpperCase()), "Formatted content should include uppercase title");
+    }
+  }
+
+  validateNode(GUIDE_TREE);
+  console.log(`✅ Guide Tree verified with ${totalTopics} topics across hierarchy!`);
+}
+
 async function testSlackStatusManager() {
   console.log("🧪 Testing SlackStatusManager formatting...");
   const sm = new SlackStatusManager();
@@ -291,6 +318,7 @@ async function runAll() {
   await testIntentInterceptor();
   await testPermissionManager();
   await testSlackStatusManager();
+  await testGuideTree();
   await testLiveOpenCode();
 
   console.log("\n🎉 All OpenCat components passed verification!");
