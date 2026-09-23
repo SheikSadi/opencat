@@ -24,7 +24,7 @@ Use this skill when:
 ## Action
 Run the following bash command using the \`bash\` tool:
 \`\`\`bash
-npx @elelem/opencat handoff --message "<A concise summary of what was accomplished and what the next prompt or action could be>"
+npx @sheiksadi/opencat handoff --message "<A concise summary of what was accomplished and what the next prompt or action could be>"
 \`\`\`
 `;
 

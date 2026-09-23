@@ -1,6 +1,6 @@
 {
-  "name": "@elelem/opencat",
-  "version": "1.0.7",
+  "name": "@sheiksadi/opencat",
+  "version": "0.0.0",
   "description": "Remote OpenCode AI Agent Bridge for Slack",
   "type": "module",
   "main": "dist/index.js",
@@ -16,7 +16,9 @@
     "build": "tsup && chmod +x dist/index.js",
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
-    "dev": "node --experimental-strip-types --watch src/index.ts"
+    "dev": "node --experimental-strip-types --watch src/index.ts",
+    "test": "node --experimental-strip-types test/verify.ts",
+    "typecheck": "tsc --noEmit"
   },
   "publishConfig": {
     "access": "public"

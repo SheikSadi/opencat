@@ -218,7 +218,7 @@
 <body>
 
 <div class="progress" id="progress"></div>
-<div class="brand">🐱 OPENCAT · @elelem/opencat</div>
+<div class="brand">🐱 OPENCAT · @sheiksadi/opencat</div>
 <div class="counter"><b id="cur">1</b> / <span id="total">12</span></div>
 <div class="hint" id="hint">Press <kbd>→</kbd> <kbd>←</kbd> or <kbd>Space</kbd> to advance slides</div>
 
@@ -230,7 +230,7 @@
     <h1>OpenCat <span class="grad">🐱</span><br>Control OpenCode via Slack</h1>
     <p class="lead">A lightweight, secure bridge that connects your local OpenCode agent to Slack. Trigger tasks, review code, and run tests from your phone or laptop while away from your desk.</p>
     <div style="margin-top: 2rem; display:flex; gap:1rem; align-items:center;">
-      <span class="badge">npm package: @elelem/opencat</span>
+      <span class="badge">npm package: @sheiksadi/opencat</span>
       <span class="badge">Slack Socket Mode (Zero Open Ports)</span>
       <span class="badge">Setup Time: &lt; 2 minutes</span>
     </div>
@@ -301,7 +301,7 @@
       <div class="arch-node" style="border-color: var(--a1);">
         <div class="icon">🐱</div>
         <h4>OpenCat CLI</h4>
-        <p><code>@elelem/opencat</code> daemon on your machine</p>
+        <p><code>@sheiksadi/opencat</code> daemon on your machine</p>
       </div>
       <div class="arch-arrow">
         ➔
@@ -338,7 +338,7 @@
         <div class="step-badge">1</div>
         <div class="step-body">
           <h4>Get the 1-Click Manifest & Create Your Bot</h4>
-          <p>Run <code>npx @elelem/opencat manifest</code> and paste the JSON at <a href="https://api.slack.com/apps" target="_blank" style="color:var(--a1)">api.slack.com/apps</a>.</p>
+          <p>Run <code>npx @sheiksadi/opencat manifest</code> and paste the JSON at <a href="https://api.slack.com/apps" target="_blank" style="color:var(--a1)">api.slack.com/apps</a>.</p>
         </div>
       </div>
       <div class="step-item">
@@ -352,7 +352,7 @@
         <div class="step-badge">3</div>
         <div class="step-body">
           <h4>Configure & Start</h4>
-          <p>Run <code>npx @elelem/opencat setup</code> to paste your tokens, then type <code>Y</code> to start listening!</p>
+          <p>Run <code>npx @sheiksadi/opencat setup</code> to paste your tokens, then type <code>Y</code> to start listening!</p>
         </div>
       </div>
     </div>
@@ -365,7 +365,7 @@
     <p class="lead">Run this command to output the pre-configured Slack configuration:</p>
     <div class="code-block">
       <span class="comment"># Output the complete JSON manifest</span><br>
-      <span class="cmd">npx @elelem/opencat manifest</span>
+      <span class="cmd">npx @sheiksadi/opencat manifest</span>
     </div>
     <div class="grid-2">
       <div class="card">
@@ -416,13 +416,13 @@
     <h2>Interactive Setup & Start</h2>
     <p class="lead">Run the built-in wizard to enter tokens and configure live synchronization:</p>
     <div class="code-block">
-      <span class="cmd">npx @elelem/opencat setup</span>
+      <span class="cmd">npx @sheiksadi/opencat setup</span>
     </div>
     <div class="card" style="margin-top: 1rem; background: var(--code-bg);">
       <p style="color: #64748b; font-family: monospace;">
         Enter Slack Bot Token (xoxb-...): <span style="color:#f8fafc;">xoxb-88860539364-...</span><br>
         🔄 Verifying Bot Token with Slack...<br>
-        <span style="color:#34d399;">🤖 Verified! Connected as @opencat-john in workspace 'elelem AI'</span><br><br>
+        <span style="color:#34d399;">🤖 Verified! Connected as @opencat-john in workspace 'My Workspace'</span><br><br>
         Enter Slack App-Level Token (xapp-...): <span style="color:#f8fafc;">xapp-1-A0C3G56DJAZ-...</span><br>
         <span style="color:#38bdf8;">✅ Configuration saved to: ~/.config/opencat/config.json</span><br><br>
         🔄 Enable live PC terminal sync with Slack? [Recommended] (Y/n): <span style="color:#f8fafc;">Y</span><br>
@@ -456,9 +456,9 @@
       </div>
     </div>
     <div style="margin-top: 1.2rem; display: flex; gap: 1rem; align-items: center;">
-      <span class="badge">Shortcut: npx @elelem/opencat attach [-c]</span>
-      <span class="badge">Toggle Sync: npx @elelem/opencat sync</span>
-      <span class="badge">Handoff: npx @elelem/opencat handoff "..."</span>
+      <span class="badge">Shortcut: npx @sheiksadi/opencat attach [-c]</span>
+      <span class="badge">Toggle Sync: npx @sheiksadi/opencat sync</span>
+      <span class="badge">Handoff: npx @sheiksadi/opencat handoff "..."</span>
     </div>
   </section>
 
@@ -517,7 +517,7 @@
       Description=OpenCat Slack Agent Listener<br>
       After=network.target<br><br>
       <span class="cmd">[Service]</span><br>
-      ExecStart=/usr/bin/env npx @elelem/opencat<br>
+      ExecStart=/usr/bin/env npx @sheiksadi/opencat<br>
       Restart=always<br>
       RestartSec=5<br><br>
       <span class="comment"># 2. Enable and start</span><br>
@@ -532,10 +532,10 @@
     <h1 style="max-width: 18ch;">Try It In This Call <span class="grad">🐱</span></h1>
     <p class="lead" style="margin-left: auto; margin-right: auto;">Open your terminal and run the first command together:</p>
     <div class="code-block" style="max-width: 500px; margin: 1.8rem auto; text-align: left;">
-      <span class="cmd">npx @elelem/opencat manifest</span>
+      <span class="cmd">npx @sheiksadi/opencat manifest</span>
     </div>
     <div style="margin-top: 1.5rem; display: flex; gap: 1.2rem; justify-content: center;">
-      <span class="badge">Package: @elelem/opencat</span>
+      <span class="badge">Package: @sheiksadi/opencat</span>
       <span class="badge">Questions & Live Setup</span>
     </div>
   </section>

@@ -10,12 +10,16 @@ import { installHandoffSkill, installShellIntegration } from "./skill.ts";
 // Load local .env if present
 dotenv.config();
 
+export type PermissionMode = "auto" | "interactive" | "read-only";
+
 export interface Config {
   slackBotToken: string;
   slackAppToken: string;
   opencodeServerUrl: string;
   opencodeWorkingDir: string;
   autoApprovePermissions: boolean;
+  permissionMode: PermissionMode;
+  liveProgress: boolean;
   port: number;
   defaultChannel?: string;
 }
@@ -93,7 +97,7 @@ export async function runInteractiveSetup(): Promise<SetupResult> {
   console.log("To connect OpenCat with your personal Slack bot, you need:");
   console.log("1. Bot User OAuth Token (starts with xoxb-)");
   console.log("2. App-Level Token for Socket Mode (starts with xapp-)\n");
-  console.log("💡 Tip: Run 'npx @elelem/opencat manifest' to get the 1-click Slack app manifest.\n");
+  console.log("💡 Tip: Run 'npx @sheiksadi/opencat manifest' to get the 1-click Slack app manifest.\n");
 
   const existing = loadSavedConfig();
 
@@ -144,12 +148,22 @@ export async function runInteractiveSetup(): Promise<SetupResult> {
   const serverUrl = process.env.OPENCODE_SERVER_URL || existing.opencodeServerUrl || "http://127.0.0.1:4096";
   const parsedUrl = new URL(serverUrl);
 
+  const rawPermMode = process.env.PERMISSION_MODE || (existing as any).permissionMode;
+  let permissionMode: PermissionMode = "auto";
+  if (rawPermMode === "interactive" || rawPermMode === "read-only" || rawPermMode === "auto") {
+    permissionMode = rawPermMode;
+  } else if (existing.autoApprovePermissions === false) {
+    permissionMode = "interactive";
+  }
+
   const resolvedConfig: Config = {
     slackBotToken,
     slackAppToken,
     opencodeServerUrl: serverUrl,
     opencodeWorkingDir: process.env.OPENCODE_WORKING_DIR || existing.opencodeWorkingDir || process.cwd(),
-    autoApprovePermissions: existing.autoApprovePermissions ?? true,
+    autoApprovePermissions: permissionMode === "auto",
+    permissionMode,
+    liveProgress: (process.env.LIVE_PROGRESS ?? (existing as any).liveProgress ?? "true") !== "false",
     port: parseInt(parsedUrl.port || "4096", 10),
   };
 
@@ -184,7 +198,7 @@ export async function runInteractiveSetup(): Promise<SetupResult> {
     console.log("                   Next Steps                          ");
     console.log("=======================================================");
     console.log("1. Start OpenCat anytime with:");
-    console.log("   npx @elelem/opencat\n");
+    console.log("   npx @sheiksadi/opencat\n");
     console.log("2. In Slack:");
     console.log("   • Send a Direct Message to your bot");
     console.log("   • Or invite it to a channel: /invite @<bot-name>");
@@ -220,12 +234,22 @@ export async function resolveConfig(options: { forceSetup?: boolean } = {}): Pro
 
     console.error("❌ Error: Missing SLACK_BOT_TOKEN or SLACK_APP_TOKEN.");
     console.error("Please provide them via environment variables, a local .env file,");
-    console.error("or run 'npx @elelem/opencat setup' to configure them interactively.");
+    console.error("or run 'npx @sheiksadi/opencat setup' to configure them interactively.");
     process.exit(1);
   }
 
   const serverUrl = process.env.OPENCODE_SERVER_URL || saved.opencodeServerUrl || "http://127.0.0.1:4096";
   const parsedUrl = new URL(serverUrl);
+
+  const rawPermMode = process.env.PERMISSION_MODE || (saved as any).permissionMode;
+  let permissionMode: PermissionMode = "auto";
+  if (rawPermMode === "interactive" || rawPermMode === "read-only" || rawPermMode === "auto") {
+    permissionMode = rawPermMode;
+  } else if (process.env.AUTO_APPROVE_PERMISSIONS === "false" || saved.autoApprovePermissions === false) {
+    permissionMode = "interactive";
+  }
+
+  const liveProgress = (process.env.LIVE_PROGRESS ?? (saved as any).liveProgress ?? "true") !== "false";
 
   return {
     config: {
@@ -233,7 +257,9 @@ export async function resolveConfig(options: { forceSetup?: boolean } = {}): Pro
       slackAppToken: appToken,
       opencodeServerUrl: serverUrl,
       opencodeWorkingDir: process.env.OPENCODE_WORKING_DIR || saved.opencodeWorkingDir || process.cwd(),
-      autoApprovePermissions: (process.env.AUTO_APPROVE_PERMISSIONS ?? saved.autoApprovePermissions ?? "true") !== "false",
+      autoApprovePermissions: permissionMode === "auto",
+      permissionMode,
+      liveProgress,
       port: parseInt(parsedUrl.port || "4096", 10),
       defaultChannel: process.env.SLACK_DEFAULT_CHANNEL || saved.defaultChannel,
     },

@@ -2,12 +2,14 @@ import { spawn, type ChildProcess } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { createOpencodeClient, type OpencodeClient } from "@opencode-ai/sdk";
+import { createOpencodeClient, type OpencodeClient, type Todo, type TextPart } from "@opencode-ai/sdk";
 import type { Config } from "./config.ts";
+import { stateTracker } from "./state-tracker.ts";
+import { permissionManager } from "./permissions.ts";
 
 export class OpenCodeService {
   public client!: OpencodeClient;
-  private config!: Config;
+  public config!: Config;
   private serverProcess: ChildProcess | null = null;
   private eventStreamActive = false;
 
@@ -16,6 +18,12 @@ export class OpenCodeService {
     this.client = createOpencodeClient({
       baseUrl: config.opencodeServerUrl,
       directory: config.opencodeWorkingDir,
+    });
+
+    // Wire permission manager to stateTracker permission events
+    permissionManager.init(config);
+    stateTracker.onPermission((perm) => {
+      return permissionManager.handlePermissionRequest(perm);
     });
   }
 
@@ -99,7 +107,7 @@ export class OpenCodeService {
   }
 
   startEventWatcher(): void {
-    if (this.eventStreamActive || !this.config.autoApprovePermissions) return;
+    if (this.eventStreamActive) return;
     this.eventStreamActive = true;
 
     (async () => {
@@ -107,32 +115,11 @@ export class OpenCodeService {
         try {
           const res = await this.client.event.subscribe();
           for await (const event of res.stream) {
-            // Check for permission update events
-            if (event && typeof event === "object" && "type" in event) {
-              if (event.type === "permission.updated" && "properties" in event) {
-                const perm = (event as any).properties;
-                if (perm?.id && perm?.sessionID) {
-                  console.log(
-                    `🔐 Auto-approving permission: ${perm.title || perm.id} for session ${perm.sessionID}`
-                  );
-                  await this.client
-                    .postSessionIdPermissionsPermissionId({
-                      path: {
-                        id: perm.sessionID,
-                        permissionID: perm.id,
-                      },
-                      body: {
-                        response: "always",
-                      },
-                    })
-                    .catch((err) => {
-                      console.warn(`⚠️ Failed to auto-approve permission:`, err);
-                    });
-                }
-              }
+            if (event) {
+              await stateTracker.handleEvent(event);
             }
           }
-        } catch {
+        } catch (err) {
           // SSE stream closed or disconnected; wait before retrying
           await new Promise((r) => setTimeout(r, 3000));
         }
@@ -157,35 +144,91 @@ export class OpenCodeService {
   }
 
   async prompt(sessionId: string, messageText: string): Promise<string> {
-    const res = await this.client.session.prompt({
-      path: { id: sessionId },
-      body: {
-        parts: [{ type: "text", text: messageText }],
-      },
-      query: { directory: this.config.opencodeWorkingDir },
-    });
+    stateTracker.setPrompt(sessionId, messageText);
 
-    if (res.error) {
-      throw new Error(`OpenCode error: ${JSON.stringify(res.error)}`);
+    try {
+      const res = await this.client.session.prompt({
+        path: { id: sessionId },
+        body: {
+          parts: [{ type: "text", text: messageText }],
+        },
+        query: { directory: this.config.opencodeWorkingDir },
+      });
+
+      if (res.error) {
+        throw new Error(`OpenCode error: ${JSON.stringify(res.error)}`);
+      }
+
+      const parts = res.data?.parts || [];
+      const textParts = parts
+        .filter((p): p is TextPart => p.type === "text")
+        .map((p) => p.text)
+        .filter(Boolean);
+
+      if (textParts.length > 0) {
+        return textParts.join("\n\n");
+      }
+
+      // Check if tools were executed without a text summary
+      const toolParts = parts.filter((p) => p.type === "tool");
+      if (toolParts.length > 0) {
+        return `✅ OpenCode executed ${toolParts.length} tool(s) successfully.`;
+      }
+
+      return "✅ Instruction processed by OpenCode.";
+    } finally {
+      stateTracker.setIdle(sessionId);
     }
+  }
 
-    const parts = res.data?.parts || [];
-    const textParts = parts
-      .filter((p): p is { type: "text"; text: string } => p.type === "text")
-      .map((p) => p.text)
-      .filter(Boolean);
-
-    if (textParts.length > 0) {
-      return textParts.join("\n\n");
+  async abort(sessionId: string): Promise<boolean> {
+    try {
+      const res = await this.client.session.abort({
+        path: { id: sessionId },
+        query: { directory: this.config.opencodeWorkingDir },
+      });
+      return !res.error;
+    } catch (err) {
+      console.warn("Error aborting session:", err);
+      return false;
     }
+  }
 
-    // Check if tools were executed without a text summary
-    const toolParts = parts.filter((p) => p.type === "tool");
-    if (toolParts.length > 0) {
-      return `✅ OpenCode executed ${toolParts.length} tool(s) successfully.`;
+  async getTodos(sessionId: string): Promise<Todo[]> {
+    try {
+      const res = await this.client.session.todo({
+        path: { id: sessionId },
+        query: { directory: this.config.opencodeWorkingDir },
+      });
+      if (res.data && Array.isArray(res.data)) {
+        return res.data as Todo[];
+      }
+      return [];
+    } catch {
+      return [];
     }
+  }
 
-    return "✅ Instruction processed by OpenCode.";
+  async respondPermission(
+    sessionId: string,
+    permissionId: string,
+    response: "once" | "always" | "reject"
+  ): Promise<boolean> {
+    try {
+      const res = await this.client.postSessionIdPermissionsPermissionId({
+        path: {
+          id: sessionId,
+          permissionID: permissionId,
+        },
+        body: {
+          response,
+        },
+      });
+      return !res.error;
+    } catch (err) {
+      console.warn(`⚠️ Failed to respond to permission ${permissionId}:`, err);
+      return false;
+    }
   }
 
   stopServer(): void {

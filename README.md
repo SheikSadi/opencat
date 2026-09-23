@@ -1,4 +1,4 @@
-# 🐱 OpenCat (`@elelem/opencat`)
+# 🐱 OpenCat (`@sheiksadi/opencat`)
 
 > **Remote OpenCode AI Agent Bridge for Slack**  
 > Control your local OpenCode development agent remotely from your phone or laptop via Slack.
@@ -13,7 +13,7 @@ OpenCat establishes a secure, outbound **WebSocket (Socket Mode)** connection to
 
 Run in your terminal:
 ```bash
-npx @elelem/opencat manifest
+npx @sheiksadi/opencat manifest
 ```
 Copy the printed JSON manifest.
 
@@ -40,14 +40,14 @@ Each user connects their own personal bot so conversations don't conflict:
 
 Run the interactive setup wizard:
 ```bash
-npx @elelem/opencat setup
+npx @sheiksadi/opencat setup
 ```
 Paste your `xoxb-...` and `xapp-...` tokens when prompted. OpenCat securely saves your config to `~/.config/opencat/config.json` (chmod `0600`).
 
 ### Step 5: Start OpenCat!
 
 ```bash
-npx @elelem/opencat
+npx @sheiksadi/opencat
 ```
 
 That's it! Your agent is live and listening on Slack.
@@ -59,7 +59,12 @@ That's it! Your agent is live and listening on Slack.
 - **Mention in channel:** `@OpenCat check git status and run tests`
 - **Direct message:** Open a DM with your bot and send any prompt directly.
 - **Thread continuity:** All replies within the same Slack thread share the same OpenCode session context.
+- **Live Tool Progress Streaming:** OpenCat displays a real-time progress card in the Slack thread updating in place with active running tools (e.g., `⚙️ Running: bash: terraform plan (12s)`), completed steps, and execution timers.
+- **Instant Status Intercept:** Ask `status`, `what's up`, or `progress` anytime. OpenCat immediately checks agent activity and replies with active tool status without accidentally triggering pending execution loops.
+- **Stop / Abort:** Reply `stop`, `abort`, or `cancel` anytime to immediately halt running tools and execution.
+- **Task Checklist:** Reply `todos` or `tasks` to view the session's active checklist.
 - **Reset session:** Send `reset` or `new session` in the thread to start fresh.
+- **Interactive Approvals:** In `interactive` or `read-only` mode, mutating operations (like `bash` or file edits) post interactive Slack cards with **Allow Once**, **Always Allow**, and **Deny** buttons.
 - **Status emojis:**
   - 👀 (`eyes`): Request received, agent is working.
   - ✅ (`white_check_mark`): Completed successfully.
@@ -74,7 +79,7 @@ If you are working on your PC and want to step away without losing your active O
 
 OpenCode will run:
 ```bash
-npx @elelem/opencat handoff --message "Tests passed. Ready for review!"
+npx @sheiksadi/opencat handoff --message "Tests passed. Ready for review!"
 ```
 OpenCat automatically detects the active PC session, posts a notification to your Slack DM, and binds that thread. Any reply you send in that Slack thread continues the exact same session!
 
@@ -83,7 +88,7 @@ OpenCat automatically detects the active PC session, posts a notification to you
 ## 🛠️ CLI Reference
 
 ```bash
-npx @elelem/opencat [command] [options]
+npx @sheiksadi/opencat [command] [options]
 ```
 
 ### Commands:
@@ -102,8 +107,24 @@ npx @elelem/opencat [command] [options]
 ### Options:
 - `--dir <path>`: Working directory for OpenCode sessions (default: current directory).
 - `--port <port>`: Port for OpenCode headless server (default: `4096`).
+- `--mode <mode>`: Permission mode: `auto`, `interactive`, or `read-only` (default: `auto`).
 - `--message, -m <msg>`: Summary message text for handoff.
 - `--channel, -c <id>`: Destination Slack channel ID (default: user DM).
+
+---
+
+## ⚙️ Configuration & Environment Variables
+
+OpenCat can be configured via interactive setup (`npx @sheiksadi/opencat setup`), saved configuration in `~/.config/opencat/config.json`, or environment variables in `.env`:
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `SLACK_BOT_TOKEN` | — | Slack Bot User OAuth Token (`xoxb-...`) |
+| `SLACK_APP_TOKEN` | — | Slack App-Level Token for Socket Mode (`xapp-...`) |
+| `PERMISSION_MODE` | `auto` | `auto` (auto-approve), `interactive` (Slack button approvals), or `read-only` (auto-approve read/search, prompt on bash/write) |
+| `LIVE_PROGRESS` | `true` | Stream live tool execution updates to Slack thread cards |
+| `OPENCODE_SERVER_URL` | `http://127.0.0.1:4096` | OpenCode server endpoint |
+| `OPENCODE_WORKING_DIR`| Current Directory | Base directory for OpenCode sessions |
 
 ---
 
@@ -130,7 +151,7 @@ After=network.target
 [Service]
 Type=simple
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/env npx @elelem/opencat
+ExecStart=/usr/bin/env npx @sheiksadi/opencat
 Restart=always
 RestartSec=5
 
