@@ -75,6 +75,11 @@ export class OpenCodeService {
       }
     );
 
+    this.serverProcess.on("error", (err) => {
+      console.warn(`[opencode-server] Failed to spawn process:`, err.message);
+      this.serverProcess = null;
+    });
+
     this.serverProcess.stdout?.on("data", (data) => {
       const line = data.toString().trim();
       if (line) console.log(`[opencode-server]: ${line}`);
