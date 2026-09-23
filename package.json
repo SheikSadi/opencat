@@ -1,6 +1,6 @@
 {
   "name": "@sheiksadi/opencat",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Remote OpenCode AI Agent Bridge for Slack",
   "type": "module",
   "main": "dist/index.js",
