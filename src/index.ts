@@ -50,6 +50,9 @@ export const SLACK_MANIFEST = {
     },
   },
   settings: {
+    interactivity: {
+      is_enabled: true,
+    },
     event_subscriptions: {
       bot_events: [
         "app_mention",
