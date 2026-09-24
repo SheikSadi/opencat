@@ -54,7 +54,7 @@ export class SlackStatusManager {
     this.activeThreads.set(key, session);
 
     try {
-      const initialText = `⚙️ *OpenCode is working on your request...*`;
+      const initialText = `⚡ *OpenCat is preparing to execute your request...*`;
       const res = await this.slackClient.chat.postMessage({
         channel,
         thread_ts: threadTs,
@@ -140,16 +140,16 @@ export class SlackStatusManager {
     const lines: string[] = [];
 
     // Header
-    lines.push(`⚡ *OpenCode is working...* (\`${elapsedSeconds}s\`)`);
+    lines.push(`⚡ *OpenCat is executing...* (\`${elapsedSeconds}s\`)`);
 
     // Active tools
     if (activeTools.length > 0) {
       for (const t of activeTools) {
         const toolElapsed = Math.max(1, Math.round((Date.now() - t.startTime) / 1000));
-        lines.push(`• ⚙️ *Running:* \`${t.title}\` (${toolElapsed}s)`);
+        lines.push(`• ⏳ *Running:* \`${t.title}\` (${toolElapsed}s)`);
       }
     } else if (state.status === "busy") {
-      lines.push(`• 🧠 *Thinking / Planning next step...*`);
+      lines.push(`• 🧠 *Thinking:* Deliberating next action...`);
     } else if (state.status === "retry" && state.retryInfo) {
       lines.push(`• 🔄 *Retrying step (attempt ${state.retryInfo.attempt}):* ${state.retryInfo.message}`);
     }
@@ -159,8 +159,8 @@ export class SlackStatusManager {
       const completedList = recentCompleted
         .map((t) => {
           const dur = (t.durationMs / 1000).toFixed(1);
-          const icon = t.status === "error" ? "❌" : "✅";
-          return `${icon} \`${t.title}\` (${dur}s)`;
+          const statusPrefix = t.status === "error" ? "🔴 *Failed:*" : "🟢 *Ran:*";
+          return `${statusPrefix} \`${t.title}\` (${dur}s)`;
         })
         .join("\n• ");
       lines.push(`• ${completedList}`);
@@ -200,9 +200,9 @@ export class SlackStatusManager {
     if (this.slackClient && session.statusMessageTs) {
       try {
         const elapsedSeconds = Math.max(1, Math.round((Date.now() - session.startTime) / 1000));
-        const icon = success ? "✅" : "⚠️";
+        const icon = success ? "🏁" : "⚠️";
         const statusText = summary || (success ? `Finished in ${elapsedSeconds}s` : `Completed with warnings in ${elapsedSeconds}s`);
-        const finishMessage = `${icon} *OpenCode:* ${statusText}`;
+        const finishMessage = `${icon} *OpenCat:* ${statusText}`;
 
         await this.slackClient.chat.update({
           channel: session.channel,

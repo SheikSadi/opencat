@@ -45,10 +45,10 @@ OpenCat provides fine-grained control over execution permissions. These are esse
 ### 1. `auto` (Default)
 Auto-approves all mutating operations (filesystem writes, bash commands, etc.). This is suitable for isolated sandbox automation environments.
 
-### 2. `interactive`
+### 2. `interactive` (Short CLI Alias: `-i`)
 Pauses execution whenever a permission is requested (both inside and outside the workspace). OpenCat formats a beautiful Block Kit interactive card containing details of the action and **"Allow Once"**, **"Always Allow"**, and **"Deny"** buttons.
 
-### 3. `read-only`
+### 3. `read-only` (Short CLI Alias: `-r`)
 Silently auto-approves all non-mutating search and read tools (`grep`, `glob`, `read`, `webfetch`). For any mutating operations (`bash`, `write`, `edit`, `delete`), it falls back to posting interactive Slack button cards.
 
 ---
@@ -93,11 +93,23 @@ When a permission is triggered, OpenCat posts a Block Kit section with an action
 
 To prevent deadlocks and ensure interactive buttons work:
 1. Turn on **Interactivity** in the [Slack App Settings](https://api.slack.com/apps) under **Interactivity & Shortcuts**.
-2. Run the OpenCat background daemon:
+2. Run the OpenCat background daemon (tokens can optionally be passed via CLI flags `--bot-token` and `--app-token`):
    ```bash
-   npm run build && node dist/index.js --mode interactive
+   npm run build && node dist/index.js --mode interactive --bot-token xoxb-... --app-token xapp-...
+   ```
+   Or use the short CLI aliases:
+   ```bash
+   npm run build && node dist/index.js -i
    ```
 3. To attach a terminal monitor (which is read-only regarding prompts but allows watching execution):
    ```bash
    npx @sheiksadi/opencat attach -c
    ```
+
+---
+
+## 🩺 Programmatic Status Monitoring
+For headless daemons and containerized environments, you can query status programmatically in JSON format using:
+```bash
+npx @sheiksadi/opencat status --json
+```
