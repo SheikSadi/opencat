@@ -25,6 +25,9 @@ export class OpenCodeService {
     stateTracker.onPermission((perm) => {
       return permissionManager.handlePermissionRequest(perm);
     });
+    stateTracker.onPermissionReplied((sessionId, permissionId, response) => {
+      return permissionManager.handlePermissionReplied(sessionId, permissionId, response);
+    });
   }
 
   async isServerRunning(): Promise<boolean> {

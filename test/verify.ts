@@ -90,6 +90,42 @@ async function testStateTracker() {
   assert.strictEqual(todoState?.todos.length, 2);
   assert.strictEqual(todoState?.todos[1].status, "in_progress");
 
+  // 6. Permission asked & replied events
+  let capturedAskedPerm: any = null;
+  tracker.onPermission((p) => {
+    capturedAskedPerm = p;
+  });
+
+  let capturedRepliedInfo: any = null;
+  tracker.onPermissionReplied((sId, pId, resp) => {
+    capturedRepliedInfo = { sId, pId, resp };
+  });
+
+  await tracker.handleEvent({
+    type: "permission.asked",
+    properties: {
+      id: "perm_test_999",
+      sessionID: sessionId,
+      permission: "external_directory",
+      patterns: ["/etc/*"],
+    },
+  });
+
+  assert.strictEqual(capturedAskedPerm?.id, "perm_test_999");
+  assert.strictEqual(capturedAskedPerm?.permission, "external_directory");
+
+  await tracker.handleEvent({
+    type: "permission.replied",
+    properties: {
+      sessionID: sessionId,
+      permissionID: "perm_test_999",
+      response: "once",
+    },
+  });
+
+  assert.strictEqual(capturedRepliedInfo?.pId, "perm_test_999");
+  assert.strictEqual(capturedRepliedInfo?.resp, "once");
+
   console.log("✅ SessionStateTracker verified successfully!");
 }
 

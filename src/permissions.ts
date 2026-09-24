@@ -8,7 +8,7 @@ export interface PendingPermission {
   channel?: string;
   threadTs?: string;
   messageTs?: string;
-  permission: Permission;
+  permission: any;
   createdAt: number;
 }
 
@@ -34,24 +34,24 @@ export class PermissionManager {
     this.sessionThreads.set(sessionId, { channel, threadTs });
   }
 
-  public isReadOnlyPermission(perm: Permission): boolean {
-    const type = (perm.type || "").toLowerCase();
+  public isReadOnlyPermission(perm: any): boolean {
+    const permType = (perm.permission || perm.type || "").toLowerCase();
     const title = (perm.title || "").toLowerCase();
     const metadata = (perm.metadata || {}) as Record<string, any>;
     const tool = String(metadata.tool || metadata.name || "").toLowerCase();
 
     // Explicitly dangerous or mutating tools
     if (
-      type === "bash" ||
+      permType === "bash" ||
       tool === "bash" ||
       title.includes("bash") ||
-      type === "write" ||
+      permType === "write" ||
       tool === "write" ||
       title.includes("write") ||
-      type === "edit" ||
+      permType === "edit" ||
       tool === "edit" ||
       title.includes("edit") ||
-      type === "delete" ||
+      permType === "delete" ||
       tool === "delete" ||
       title.includes("delete")
     ) {
@@ -60,9 +60,9 @@ export class PermissionManager {
 
     // Known read-only operations
     if (
-      type === "read" ||
-      type === "glob" ||
-      type === "grep" ||
+      permType === "read" ||
+      permType === "glob" ||
+      permType === "grep" ||
       tool === "read" ||
       tool === "glob" ||
       tool === "grep" ||
@@ -77,32 +77,41 @@ export class PermissionManager {
       return true;
     }
 
+    if (permType === "external_directory") {
+      if (tool === "read" || (!tool && metadata.filepath && !metadata.command)) {
+        return true;
+      }
+    }
+
     return false;
   }
 
-  public async handlePermissionRequest(perm: Permission): Promise<void> {
+  public async handlePermissionRequest(perm: any): Promise<void> {
     const mode = this.config?.permissionMode || "auto";
     const sessionId = perm.sessionID;
     const permissionId = perm.id;
 
     if (!sessionId || !permissionId) return;
 
+    const permType = perm.permission || perm.type || "Tool Execution";
+    const permTitle = perm.title || `Permission required: ${permType}`;
+
     // 1. Auto mode: approve immediately
     if (mode === "auto") {
-      console.log(`🔐 [Permission: Auto-Approved] ${perm.title || perm.id} for session ${sessionId}`);
+      console.log(`🔐 [Permission: Auto-Approved] ${permTitle} for session ${sessionId}`);
       await opencodeService.respondPermission(sessionId, permissionId, "always");
       return;
     }
 
     // 2. Read-only mode: auto-approve read tools, prompt for others
     if (mode === "read-only" && this.isReadOnlyPermission(perm)) {
-      console.log(`🔐 [Permission: Read-Only Auto-Approved] ${perm.title || perm.id} for session ${sessionId}`);
+      console.log(`🔐 [Permission: Read-Only Auto-Approved] ${permTitle} for session ${sessionId}`);
       await opencodeService.respondPermission(sessionId, permissionId, "always");
       return;
     }
 
     // 3. Interactive / Manual Approval via Slack
-    console.log(`🔐 [Permission: Interactive Request] ${perm.title || perm.id} for session ${sessionId}`);
+    console.log(`🔐 [Permission: Interactive Request] ${permTitle} for session ${sessionId}`);
 
     const threadInfo = this.sessionThreads.get(sessionId);
     if (!threadInfo || !this.slackClient) {
@@ -126,7 +135,7 @@ export class PermissionManager {
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `🛡️ *Permission Request:*\n*${perm.title || perm.type || "Tool Execution"}*\n${permDetails}`,
+            text: `🛡️ *Permission Request:*\n*${permTitle}*\n${permDetails}`,
           },
         },
         {
@@ -160,7 +169,7 @@ export class PermissionManager {
       const res = await this.slackClient.chat.postMessage({
         channel,
         thread_ts: threadTs,
-        text: `🛡️ Permission Request: ${perm.title || perm.type || "Tool Execution"}`,
+        text: `🛡️ Permission Request: ${permTitle}`,
         blocks,
       });
 
@@ -180,19 +189,30 @@ export class PermissionManager {
     }
   }
 
-  private formatPermissionDetails(perm: Permission): string {
+  private formatPermissionDetails(perm: any): string {
     const meta = (perm.metadata || {}) as Record<string, any>;
     const lines: string[] = [];
 
-    if (meta.command) {
-      lines.push(`\`\`\`bash\n${meta.command}\n\`\`\``);
-    } else if (meta.filePath) {
-      lines.push(`• *Path:* \`${meta.filePath}\``);
-    } else if (meta.query) {
-      lines.push(`• *Query:* \`${meta.query}\``);
-    } else if (perm.pattern) {
-      const patternStr = Array.isArray(perm.pattern) ? perm.pattern.join(", ") : perm.pattern;
+    const command = meta.command || meta.cmd;
+    const filepath = meta.filepath || meta.filePath || meta.path;
+    const query = meta.query;
+    const patterns = perm.patterns || perm.pattern;
+
+    if (command) {
+      lines.push(`\`\`\`bash\n${command}\n\`\`\``);
+    } else if (filepath) {
+      lines.push(`• *Path:* \`${filepath}\``);
+    } else if (query) {
+      lines.push(`• *Query:* \`${query}\``);
+    }
+    
+    if (patterns) {
+      const patternStr = Array.isArray(patterns) ? patterns.join(", ") : patterns;
       lines.push(`• *Pattern:* \`${patternStr}\``);
+    }
+
+    if (lines.length === 0) {
+      lines.push(`• *Permission:* \`${perm.permission || perm.type || "Authorization required"}\``);
     }
 
     return lines.join("\n");
@@ -239,6 +259,43 @@ export class PermissionManager {
     }
 
     return true;
+  }
+
+  public async handlePermissionReplied(
+    sessionId: string,
+    permissionId: string,
+    response: string
+  ): Promise<void> {
+    const pending = this.pendingPermissions.get(permissionId);
+    if (!pending) return;
+
+    this.pendingPermissions.delete(permissionId);
+
+    if (this.slackClient && pending.channel && pending.messageTs) {
+      try {
+        const icon = response === "reject" ? "🚫" : "✅";
+        const actionLabel = response === "reject" ? "Denied" : response === "always" ? "Always Allowed" : "Allowed";
+        const permTitle = pending.permission.title || pending.permission.permission || pending.permission.type || "Tool Execution";
+        const updateText = `${icon} *Permission ${actionLabel}* for *${permTitle}*`;
+
+        await this.slackClient.chat.update({
+          channel: pending.channel,
+          ts: pending.messageTs,
+          text: updateText,
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: updateText,
+              },
+            },
+          ],
+        });
+      } catch (err) {
+        console.warn("⚠️ Failed to update Slack permission card after reply event:", err);
+      }
+    }
   }
 }
 

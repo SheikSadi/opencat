@@ -35,12 +35,14 @@ export interface SessionState {
 }
 
 export type StateListener = (sessionId: string, state: SessionState) => void;
-export type PermissionListener = (permission: Permission) => void | Promise<void>;
+export type PermissionListener = (permission: any) => void | Promise<void>;
+export type PermissionRepliedListener = (sessionId: string, permissionId: string, response: string) => void | Promise<void>;
 
 export class SessionStateTracker {
   private sessions = new Map<string, SessionState>();
   private stateListeners = new Set<StateListener>();
   private permissionListeners = new Set<PermissionListener>();
+  private permissionRepliedListeners = new Set<PermissionRepliedListener>();
 
   public getOrCreateSession(sessionId: string): SessionState {
     let state = this.sessions.get(sessionId);
@@ -87,6 +89,11 @@ export class SessionStateTracker {
   public onPermission(listener: PermissionListener): () => void {
     this.permissionListeners.add(listener);
     return () => this.permissionListeners.delete(listener);
+  }
+
+  public onPermissionReplied(listener: PermissionRepliedListener): () => void {
+    this.permissionRepliedListeners.add(listener);
+    return () => this.permissionRepliedListeners.delete(listener);
   }
 
   private notifyStateListeners(sessionId: string): void {
@@ -235,14 +242,28 @@ export class SessionStateTracker {
         break;
       }
 
+      case "permission.asked":
       case "permission.updated": {
         if (props?.id && props?.sessionID) {
-          const perm = props as Permission;
+          const perm = props as any;
           for (const listener of this.permissionListeners) {
             try {
               await listener(perm);
             } catch (err) {
               console.error("Error in permission listener:", err);
+            }
+          }
+        }
+        break;
+      }
+
+      case "permission.replied": {
+        if (props?.permissionID && props?.sessionID) {
+          for (const listener of this.permissionRepliedListeners) {
+            try {
+              await listener(props.sessionID, props.permissionID, props.response);
+            } catch (err) {
+              console.error("Error in permission replied listener:", err);
             }
           }
         }
