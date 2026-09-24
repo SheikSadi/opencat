@@ -119,9 +119,15 @@ npx @sheiksadi/opencat [command] [options]
 ### Options:
 - `--dir <path>`: Working directory for OpenCode sessions (default: current directory).
 - `--port <port>`: Port for OpenCode headless server (default: `4096`).
-- `--mode <mode>`: Permission mode: `auto`, `interactive`, or `read-only` (default: `auto`).
+- `--mode <mode>`: Permission mode: `auto`, `interactive`, or `read-only` (default: `auto`; aliases: `-i` = `interactive`, `-r` = `read-only`).
 - `--message, -m <msg>`: Summary message text for handoff.
 - `--channel, -c <id>`: Destination Slack channel ID (default: user DM).
+
+Examples:
+```bash
+npx @sheiksadi/opencat -i
+npx @sheiksadi/opencat -r
+```
 
 ---
 

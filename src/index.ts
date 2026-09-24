@@ -10,6 +10,7 @@ import { intentInterceptor } from "./interceptor.ts";
 import { executeHandoff } from "./handoff.ts";
 import { installHandoffSkill, installShellIntegration } from "./skill.ts";
 import { startInteractiveGuide, printAllGuide } from "./guide.ts";
+import { parseStartOptions } from "./cli-options.ts";
 
 export const SLACK_MANIFEST = {
   _metadata: {
@@ -87,7 +88,7 @@ Commands:
 Options:
   --port <port>       Port for OpenCode headless server (default: 4096)
   --dir <path>        Working directory for OpenCode sessions (default: current directory)
-  --mode <mode>       Permission mode: auto, interactive, or read-only (default: auto)
+  --mode <mode>       Permission mode: auto, interactive, or read-only (default: auto; aliases: -i, -r)
   --message, -m <msg> Message text for handoff
   --channel, -c <id>  Target Slack channel for handoff (default: user DM)
 
@@ -95,6 +96,8 @@ Examples:
   npx @sheiksadi/opencat
   npx @sheiksadi/opencat setup
   npx @sheiksadi/opencat manifest
+  npx @sheiksadi/opencat -i
+  npx @sheiksadi/opencat -r
   npx @sheiksadi/opencat handoff "Tests passed. Ready for review!"
   npx @sheiksadi/opencat --dir /path/to/my-repo
 `);
@@ -575,23 +578,7 @@ async function main() {
     process.exit(res.status ?? 0);
   }
 
-  // Parse optional flags like --dir, --port, --mode
-  let workingDir: string | undefined;
-  let port: number | undefined;
-  let permissionMode: any;
-
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--dir" && args[i + 1]) {
-      workingDir = args[i + 1];
-      i++;
-    } else if (args[i] === "--port" && args[i + 1]) {
-      port = parseInt(args[i + 1], 10);
-      i++;
-    } else if (args[i] === "--mode" && args[i + 1]) {
-      permissionMode = args[i + 1];
-      i++;
-    }
-  }
+  const { workingDir, port, permissionMode } = parseStartOptions(args);
 
   const { config, startNow } = await resolveConfig();
   if (!startNow) {

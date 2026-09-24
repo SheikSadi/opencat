@@ -7,6 +7,7 @@ import { intentInterceptor } from "../src/interceptor.ts";
 import { permissionManager, PermissionManager } from "../src/permissions.ts";
 import { slackStatusManager, SlackStatusManager } from "../src/slack-status.ts";
 import { GUIDE_TREE, formatTopicContent, type GuideTopic } from "../src/guide.ts";
+import { parseStartOptions } from "../src/cli-options.ts";
 
 async function testStateTracker() {
   console.log("🧪 Testing SessionStateTracker event ingestion...");
@@ -309,6 +310,22 @@ async function testLiveOpenCode() {
   }
 }
 
+function testCliOptionAliases() {
+  console.log("🧪 Testing CLI permission mode aliases...");
+
+  assert.strictEqual(parseStartOptions(["-i"]).permissionMode, "interactive");
+  assert.strictEqual(parseStartOptions(["-r"]).permissionMode, "read-only");
+  assert.strictEqual(parseStartOptions(["--mode", "interactive"]).permissionMode, "interactive");
+  assert.strictEqual(parseStartOptions(["--mode", "read-only"]).permissionMode, "read-only");
+
+  const parsed = parseStartOptions(["start", "--dir", "/tmp/work", "--port", "4096", "-i"]);
+  assert.strictEqual(parsed.workingDir, "/tmp/work");
+  assert.strictEqual(parsed.port, 4096);
+  assert.strictEqual(parsed.permissionMode, "interactive");
+
+  console.log("✅ CLI permission mode aliases verified successfully!");
+}
+
 async function runAll() {
   console.log("==================================================");
   console.log("      🐱 OpenCat Comprehensive Verification       ");
@@ -319,6 +336,7 @@ async function runAll() {
   await testPermissionManager();
   await testSlackStatusManager();
   await testGuideTree();
+  testCliOptionAliases();
   await testLiveOpenCode();
 
   console.log("\n🎉 All OpenCat components passed verification!");
