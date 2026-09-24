@@ -224,23 +224,20 @@ export async function runInteractiveSetup(): Promise<SetupResult> {
   return { config: resolvedConfig, startNow };
 }
 
-export async function resolveConfig(options: { forceSetup?: boolean } = {}): Promise<SetupResult> {
+export async function resolveConfig(options: {
+  forceSetup?: boolean;
+  botToken?: string;
+  appToken?: string;
+} = {}): Promise<SetupResult> {
   if (options.forceSetup) {
     return runInteractiveSetup();
   }
 
-  // 1. Check process.env (or .env)
-  let botToken = process.env.SLACK_BOT_TOKEN;
-  let appToken = process.env.SLACK_APP_TOKEN;
-
-  // 2. Check saved file config
   const saved = loadSavedConfig();
-  if (!botToken && saved.slackBotToken) {
-    botToken = saved.slackBotToken;
-  }
-  if (!appToken && saved.slackAppToken) {
-    appToken = saved.slackAppToken;
-  }
+
+  // 1. Resolve tokens with CLI > Env > Saved Config precedence
+  let botToken = options.botToken || process.env.SLACK_BOT_TOKEN || saved.slackBotToken;
+  let appToken = options.appToken || process.env.SLACK_APP_TOKEN || saved.slackAppToken;
 
   // 3. If missing, prompt interactively if running in TTY
   if (!botToken || !appToken) {

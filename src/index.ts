@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { App } from "@slack/bolt";
+import pkg from "@slack/bolt";
+const { App } = pkg;
 import { resolveConfig, runInteractiveSetup, getConfigFilePath, type Config } from "./config.ts";
 import { sessionStore } from "./session-store.ts";
 import { opencodeService } from "./opencode.ts";
@@ -194,14 +195,27 @@ async function startListener(config: Config) {
     return false;
   }
 
-  try {
-    const auth = await app.client.auth.test({ token: config.slackBotToken });
-    botUserId = auth.user_id || "";
-    botId = auth.bot_id || "";
-    console.log(`🤖 Bot connected as: @${auth.user} (User ID: ${botUserId}, Bot ID: ${botId})`);
-  } catch (err) {
-    console.error("❌ Failed to verify Slack credentials:", err);
-    process.exit(1);
+  let authSuccess = false;
+  let authDelay = 1000;
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    try {
+      console.log(`🔑 Testing Slack credentials (attempt ${attempt}/10)...`);
+      const auth = await app.client.auth.test({ token: config.slackBotToken });
+      botUserId = auth.user_id || "";
+      botId = auth.bot_id || "";
+      console.log(`🤖 Bot connected as: @${auth.user} (User ID: ${botUserId}, Bot ID: ${botId})`);
+      authSuccess = true;
+      break;
+    } catch (err: any) {
+      console.error(`❌ Slack authentication attempt ${attempt} failed:`, err.message || err);
+      if (attempt === 10) {
+        console.error("❌ Unrecoverable authentication failure. Exiting.");
+        process.exit(1);
+      }
+      console.log(`🔄 Retrying authentication in ${authDelay}ms...`);
+      await new Promise((resolve) => setTimeout(resolve, authDelay));
+      authDelay = Math.min(authDelay * 2, 60000);
+    }
   }
 
   // Handle interactive permission approvals from Slack buttons
@@ -308,9 +322,26 @@ async function startListener(config: Config) {
     }
 
     try {
+      // Ensure the OpenCode server is running and healthy
+      await opencodeService.ensureServer();
+
       // Get or create session
       let sessionId = sessionStore.get(threadKey);
-      if (!sessionId) {
+      let sessionExists = false;
+      if (sessionId) {
+        try {
+          const res = await opencodeService.client.session.get({
+            path: { id: sessionId },
+          });
+          if (res?.data && !res?.error) {
+            sessionExists = true;
+          }
+        } catch {
+          sessionExists = false;
+        }
+      }
+
+      if (!sessionId || !sessionExists) {
         const title = `Slack (${userId}): ${cleanText.slice(0, 40)}`;
         sessionId = await opencodeService.createSession(title);
         sessionStore.set(threadKey, sessionId);
@@ -430,8 +461,47 @@ async function startListener(config: Config) {
     });
   });
 
-  await app.start();
-  console.log("🟢 Slack Socket Mode listener is running and ready for instructions!");
+  async function startAppWithRetry() {
+    let delay = 1000;
+    const maxRetries = 10;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`⚡ Starting Slack Socket Mode listener (attempt ${attempt}/${maxRetries})...`);
+        await app.start();
+        console.log("🟢 Slack Socket Mode listener is running and ready for instructions!");
+        return;
+      } catch (err: any) {
+        console.error(`❌ Failed to start Slack Socket Mode listener (attempt ${attempt}/${maxRetries}):`, err.message || err);
+        if (attempt === maxRetries) {
+          console.error("❌ Max connection retries reached. Exiting.");
+          process.exit(1);
+        }
+        console.log(`🔄 Retrying listener in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay = Math.min(delay * 2, 60000);
+      }
+    }
+  }
+
+  // Bind to socket mode client failures
+  const socketClient = (app as any).receiver?.client;
+  if (socketClient) {
+    socketClient.on("reconnecting", () => {
+      console.log("🔄 Slack Socket Mode connection dropped. Reconnecting...");
+    });
+    socketClient.on("failed", async (err: any) => {
+      console.error("❌ Slack Socket Mode connection failed permanently:", err);
+      console.log("🔄 Re-initializing listener with exponential backoff...");
+      try {
+        await app.stop();
+      } catch (e) {
+        console.warn("⚠️ Warning during app.stop() execution:", e);
+      }
+      await startAppWithRetry();
+    });
+  }
+
+  await startAppWithRetry();
 
   const cleanup = async () => {
     console.log("\nShutting down listener...");
@@ -449,6 +519,8 @@ async function startListener(config: Config) {
 async function main() {
   const args = process.argv.slice(2);
   const command = args[0] || "start";
+
+  const { workingDir, port, permissionMode, botToken, appToken } = parseStartOptions(args);
 
   if (["--help", "-h", "help"].includes(command)) {
     printHelp();
@@ -518,7 +590,7 @@ async function main() {
   }
 
   if (command === "attach") {
-    const { config } = await resolveConfig();
+    const { config } = await resolveConfig({ botToken, appToken });
     const extraArgs = args.slice(1);
     console.log(`🔗 Attaching to OpenCode server at ${config.opencodeServerUrl}...`);
     const { spawnSync } = await import("node:child_process");
@@ -559,15 +631,34 @@ async function main() {
   }
 
   if (command === "status") {
-    const { config: cfg } = await resolveConfig();
-    console.log("=== OpenCat Status ===");
-    console.log("Config file:", getConfigFilePath());
-    console.log("Slack Bot Token:", cfg.slackBotToken ? `configured (${cfg.slackBotToken.slice(0, 9)}...)` : "missing");
-    console.log("Slack App Token:", cfg.slackAppToken ? `configured (${cfg.slackAppToken.slice(0, 9)}...)` : "missing");
-    console.log("OpenCode Server URL:", cfg.opencodeServerUrl);
-    console.log("Working Directory:", cfg.opencodeWorkingDir);
-    console.log("Permission Mode:", cfg.permissionMode);
-    console.log("Live Progress:", cfg.liveProgress ? "enabled" : "disabled");
+    const { config: cfg } = await resolveConfig({ botToken, appToken });
+    opencodeService.init(cfg);
+    const isRunning = await opencodeService.isServerRunning();
+    const useJson = args.includes("--json");
+
+    if (useJson) {
+      console.log(JSON.stringify({
+        status: "ok",
+        configFile: getConfigFilePath(),
+        slackBotToken: cfg.slackBotToken ? "configured" : "missing",
+        slackAppToken: cfg.slackAppToken ? "configured" : "missing",
+        opencodeServerUrl: cfg.opencodeServerUrl,
+        opencodeWorkingDir: cfg.opencodeWorkingDir,
+        permissionMode: cfg.permissionMode,
+        liveProgress: cfg.liveProgress,
+        opencodeServerRunning: isRunning,
+      }, null, 2));
+    } else {
+      console.log("=== OpenCat Status ===");
+      console.log("Config file:", getConfigFilePath());
+      console.log("Slack Bot Token:", cfg.slackBotToken ? `configured (${cfg.slackBotToken.slice(0, 9)}...)` : "missing");
+      console.log("Slack App Token:", cfg.slackAppToken ? `configured (${cfg.slackAppToken.slice(0, 9)}...)` : "missing");
+      console.log("OpenCode Server URL:", cfg.opencodeServerUrl);
+      console.log("Working Directory:", cfg.opencodeWorkingDir);
+      console.log("Permission Mode:", cfg.permissionMode);
+      console.log("Live Progress:", cfg.liveProgress ? "enabled" : "disabled");
+      console.log("OpenCode Server:", isRunning ? "running" : "stopped");
+    }
     process.exit(0);
   }
 
@@ -581,9 +672,7 @@ async function main() {
     process.exit(res.status ?? 0);
   }
 
-  const { workingDir, port, permissionMode } = parseStartOptions(args);
-
-  const { config, startNow } = await resolveConfig();
+  const { config, startNow } = await resolveConfig({ botToken, appToken });
   if (!startNow) {
     process.exit(0);
   }

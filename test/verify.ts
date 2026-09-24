@@ -347,19 +347,61 @@ async function testLiveOpenCode() {
 }
 
 function testCliOptionAliases() {
-  console.log("🧪 Testing CLI permission mode aliases...");
+  console.log("🧪 Testing CLI permission mode aliases and token flags...");
 
   assert.strictEqual(parseStartOptions(["-i"]).permissionMode, "interactive");
   assert.strictEqual(parseStartOptions(["-r"]).permissionMode, "read-only");
   assert.strictEqual(parseStartOptions(["--mode", "interactive"]).permissionMode, "interactive");
   assert.strictEqual(parseStartOptions(["--mode", "read-only"]).permissionMode, "read-only");
 
-  const parsed = parseStartOptions(["start", "--dir", "/tmp/work", "--port", "4096", "-i"]);
+  const parsed = parseStartOptions(["start", "--dir", "/tmp/work", "--port", "4096", "-i", "--bot-token", "xoxb-cli-test", "--app-token", "xapp-cli-test"]);
   assert.strictEqual(parsed.workingDir, "/tmp/work");
   assert.strictEqual(parsed.port, 4096);
   assert.strictEqual(parsed.permissionMode, "interactive");
+  assert.strictEqual(parsed.botToken, "xoxb-cli-test");
+  assert.strictEqual(parsed.appToken, "xapp-cli-test");
 
-  console.log("✅ CLI permission mode aliases verified successfully!");
+  console.log("✅ CLI permission mode aliases and token flags verified successfully!");
+}
+
+async function testConfigPrecedence() {
+  console.log("🧪 Testing resolveConfig token precedence...");
+
+  // Mock environment variables
+  const oldBotToken = process.env.SLACK_BOT_TOKEN;
+  const oldAppToken = process.env.SLACK_APP_TOKEN;
+  
+  process.env.SLACK_BOT_TOKEN = "env-bot-token";
+  process.env.SLACK_APP_TOKEN = "env-app-token";
+
+  try {
+    // 1. Precedence: CLI options should override environment variables
+    const { config: configCli } = await resolveConfig({
+      botToken: "cli-bot-token",
+      appToken: "cli-app-token",
+    });
+    assert.strictEqual(configCli.slackBotToken, "cli-bot-token");
+    assert.strictEqual(configCli.slackAppToken, "cli-app-token");
+
+    // 2. Precedence: Environment variables should override saved config if CLI options are not passed
+    const { config: configEnv } = await resolveConfig();
+    assert.strictEqual(configEnv.slackBotToken, "env-bot-token");
+    assert.strictEqual(configEnv.slackAppToken, "env-app-token");
+    
+    console.log("✅ resolveConfig token precedence verified successfully!");
+  } finally {
+    // Restore environment variables
+    if (oldBotToken !== undefined) {
+      process.env.SLACK_BOT_TOKEN = oldBotToken;
+    } else {
+      delete process.env.SLACK_BOT_TOKEN;
+    }
+    if (oldAppToken !== undefined) {
+      process.env.SLACK_APP_TOKEN = oldAppToken;
+    } else {
+      delete process.env.SLACK_APP_TOKEN;
+    }
+  }
 }
 
 async function runAll() {
@@ -373,6 +415,7 @@ async function runAll() {
   await testSlackStatusManager();
   await testGuideTree();
   testCliOptionAliases();
+  await testConfigPrecedence();
   await testLiveOpenCode();
 
   console.log("\n🎉 All OpenCat components passed verification!");

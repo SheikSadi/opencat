@@ -7,4 +7,5 @@ export default defineConfig({
   clean: true,
   dts: false,
   sourcemap: true,
+  noExternal: ["@slack/bolt"],
 });
