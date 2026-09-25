@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { createOpencodeClient, type OpencodeClient, type Todo, type TextPart } from "@opencode-ai/sdk";
+import { createOpencodeClient, type OpencodeClient, type Todo, type TextPart, type FilePartInput } from "@opencode-ai/sdk";
 import type { Config } from "./config.ts";
 import { stateTracker } from "./state-tracker.ts";
 import { permissionManager } from "./permissions.ts";
@@ -151,14 +151,37 @@ export class OpenCodeService {
     return res.data.id;
   }
 
-  async prompt(sessionId: string, messageText: string): Promise<string> {
+  async prompt(
+    sessionId: string,
+    messageText: string,
+    options?: {
+      agent?: "build" | "plan" | string;
+      files?: Array<{ mime: string; filename?: string; url: string }>;
+    }
+  ): Promise<string> {
     stateTracker.setPrompt(sessionId, messageText);
 
     try {
+      const inputParts: Array<{ type: "text"; text: string } | FilePartInput> = [];
+
+      if (options?.files && options.files.length > 0) {
+        for (const f of options.files) {
+          inputParts.push({
+            type: "file",
+            mime: f.mime,
+            filename: f.filename,
+            url: f.url,
+          });
+        }
+      }
+
+      inputParts.push({ type: "text", text: messageText });
+
       const res = await this.client.session.prompt({
         path: { id: sessionId },
         body: {
-          parts: [{ type: "text", text: messageText }],
+          parts: inputParts,
+          ...(options?.agent ? { agent: options.agent } : {}),
         },
         query: { directory: this.config.opencodeWorkingDir },
       });
@@ -167,8 +190,8 @@ export class OpenCodeService {
         throw new Error(`OpenCode error: ${JSON.stringify(res.error)}`);
       }
 
-      const parts = res.data?.parts || [];
-      const textParts = parts
+      const responseParts = res.data?.parts || [];
+      const textParts = responseParts
         .filter((p): p is TextPart => p.type === "text")
         .map((p) => p.text)
         .filter(Boolean);
@@ -178,7 +201,7 @@ export class OpenCodeService {
       }
 
       // Check if tools were executed without a text summary
-      const toolParts = parts.filter((p) => p.type === "tool");
+      const toolParts = responseParts.filter((p) => (p as any).type === "tool");
       if (toolParts.length > 0) {
         return `✅ OpenCode executed ${toolParts.length} tool(s) successfully.`;
       }

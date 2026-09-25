@@ -19,19 +19,34 @@ export const SLACK_MANIFEST = {
     minor_version: 1,
   },
   display_information: {
-    name: "OpenCat",
-    description: "Remote OpenCode AI Agent Bridge for Slack",
+    name: "LocalCat",
+    description: "Local OpenCode AI Agent Bridge for Slack",
     background_color: "#121212",
   },
   features: {
     bot_user: {
-      display_name: "OpenCat",
+      display_name: "LocalCat",
       always_online: true,
     },
+    slash_commands: [
+      {
+        command: "/localcat",
+        description: "Manage LocalCat middleware (reinstall/sync manifest)",
+        usage_hint: "[reinstall]",
+        should_escape: false,
+      },
+      {
+        command: "/localcode",
+        description: "Control local OpenCode agent mode and status",
+        usage_hint: "[build | plan | mode | status]",
+        should_escape: false,
+      },
+    ],
   },
   oauth_config: {
     scopes: {
       bot: [
+        "commands",
         "app_mentions:read",
         "channels:history",
         "channels:read",
@@ -218,6 +233,284 @@ async function startListener(config: Config) {
     }
   }
 
+  // Helper to fetch Slack private file with bot token authentication
+  async function downloadSlackFileAsBase64(
+    url: string,
+    token: string
+  ): Promise<{ base64: string; mimeType: string } | null> {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        console.warn(`⚠️ Failed to download Slack file from ${url}: status ${res.status}`);
+        return null;
+      }
+      const mimeType = res.headers.get("content-type") || "application/octet-stream";
+      const arrayBuffer = await res.arrayBuffer();
+      const base64 = Buffer.from(arrayBuffer).toString("base64");
+      return { base64, mimeType };
+    } catch (err: any) {
+      console.warn(`⚠️ Error downloading Slack file:`, err.message || err);
+      return null;
+    }
+  }
+
+  // Helper to reinstall/sync Slack manifest via API or Slack CLI
+  async function performManifestReinstall(): Promise<{ success: boolean; message: string }> {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const os = await import("node:os");
+
+    let userToken = "";
+    const credFile = path.join(os.homedir(), ".slack/credentials.json");
+    if (fs.existsSync(credFile)) {
+      try {
+        const creds = JSON.parse(fs.readFileSync(credFile, "utf-8"));
+        for (const teamId of Object.keys(creds)) {
+          if (creds[teamId]?.token) {
+            userToken = creds[teamId].token;
+            break;
+          }
+        }
+      } catch {}
+    }
+
+    if (!userToken) {
+      userToken = process.env.SLACK_USER_TOKEN || process.env.SLACK_CONFIG_TOKEN || "";
+    }
+
+    let appId = process.env.SLACK_APP_ID || "";
+    if (!appId && userToken && config.slackBotToken) {
+      try {
+        const authRes = await fetch("https://slack.com/api/auth.test", {
+          headers: { Authorization: `Bearer ${config.slackBotToken}` },
+        });
+        const authJson = await authRes.json();
+        const botId = authJson.bot_id;
+        if (botId) {
+          const botRes = await fetch(`https://slack.com/api/bots.info?bot=${botId}`, {
+            headers: { Authorization: `Bearer ${userToken}` },
+          });
+          const botJson = await botRes.json();
+          appId = botJson.bot?.app_id || "";
+        }
+      } catch (err: any) {
+        console.warn("⚠️ Could not resolve Slack app_id:", err.message);
+      }
+    }
+
+    if (!appId || !userToken) {
+      return {
+        success: false,
+        message: "❌ Could not find Slack User/Config Token in `~/.slack/credentials.json`. Run `slack login` on your host once to link the CLI.",
+      };
+    }
+
+    try {
+      const updateRes = await fetch("https://slack.com/api/apps.manifest.update", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          "Content-Type": "application/json; charset=utf-8",
+        },
+        body: JSON.stringify({
+          app_id: appId,
+          manifest: SLACK_MANIFEST,
+        }),
+      });
+      const updateJson = await updateRes.json();
+
+      if (!updateJson.ok) {
+        return {
+          success: false,
+          message: `⚠️ Slack API error updating manifest: \`${updateJson.error}\``,
+        };
+      }
+
+      // If slack CLI exists, run slack app install to activate changes in workspace
+      const { spawnSync } = await import("node:child_process");
+      const cliCheck = spawnSync("which", ["slack"]);
+      if (cliCheck.status === 0) {
+        const installRes = spawnSync("slack", ["app", "install", `--app=${appId}`], {
+          encoding: "utf-8",
+        });
+        if (installRes.status === 0) {
+          return {
+            success: true,
+            message: `🎉 *OpenCat reinstalled successfully!* App \`${appId}\` updated with the latest manifest and slash commands activated.`,
+          };
+        }
+      }
+
+      return {
+        success: true,
+        message: `✅ *Manifest updated via Slack API* for app \`${appId}\`. If new scopes were added, reinstall to workspace in the Slack App Console.`,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        message: `❌ Failed to reinstall app: ${err.message || String(err)}`,
+      };
+    }
+  }
+
+  // Command handler for /localcat (LocalCat middleware management)
+  app.command("/localcat", async ({ command, ack, respond }) => {
+    await ack();
+    const subcmd = (command.text || "").trim().toLowerCase();
+
+    if (subcmd === "reinstall" || subcmd === "sync") {
+      await respond({
+        text: "⏳ Reinstalling LocalCat Slack app with latest manifest...",
+        response_type: "ephemeral",
+      });
+      const result = await performManifestReinstall();
+      await respond({
+        text: result.message,
+        response_type: "ephemeral",
+      });
+    } else {
+      await respond({
+        text: "Usage: `/localcat reinstall` (Sync & reinstall Slack app with latest manifest)",
+        response_type: "ephemeral",
+      });
+    }
+  });
+
+  // Command handler for /localcode (Local OpenCode server agent modes & status)
+  app.command("/localcode", async ({ command, ack, respond }) => {
+    await ack();
+    const subcmd = (command.text || "").trim().toLowerCase();
+    const channelId = command.channel_id;
+
+    if (subcmd === "status") {
+      const activeMode = sessionStore.getChannelMode(channelId);
+      const isOnline = await opencodeService.isServerRunning();
+      await respond({
+        text: `📊 *Local OpenCode Status*\n• Server: ${isOnline ? "🟢 Online" : "🔴 Offline"}\n• Mode: *${activeMode.toUpperCase()}* (\`${activeMode}\`)\n• Port: ${config.port}\n• Directory: \`${config.opencodeWorkingDir}\``,
+        response_type: "ephemeral",
+      });
+    } else if (subcmd === "build") {
+      if (channelId) {
+        sessionStore.setChannelMode(channelId, "build");
+      }
+      await respond({
+        text: "⚡ Switched to *Build Mode* (`build`). Code editing and execution enabled.",
+        response_type: "ephemeral",
+      });
+    } else if (subcmd === "plan") {
+      if (channelId) {
+        sessionStore.setChannelMode(channelId, "plan");
+      }
+      await respond({
+        text: "🧠 Switched to *Plan Mode* (`plan`). Read-only analysis and planning.",
+        response_type: "ephemeral",
+      });
+    } else if (subcmd === "mode" || subcmd === "") {
+      const currentMode = sessionStore.getChannelMode(channelId);
+      const blocks = [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `⚙️ *Select OpenCode Agent Mode:*\nCurrent active mode in this channel: *${currentMode.toUpperCase()}* (\`${currentMode}\`)`,
+          },
+        },
+        {
+          type: "actions",
+          elements: [
+            {
+              type: "button",
+              text: { type: "plain_text", text: "🧠 Plan Mode", emoji: true },
+              action_id: "opencat_act_mode_plan",
+              style: currentMode === "plan" ? "primary" : undefined,
+            },
+            {
+              type: "button",
+              text: { type: "plain_text", text: "⚡ Build Mode", emoji: true },
+              action_id: "opencat_act_mode_build",
+              style: currentMode === "build" ? "primary" : undefined,
+            },
+          ],
+        },
+      ];
+      await respond({ blocks, response_type: "ephemeral" });
+    } else {
+      await respond({
+        text: "Usage: `/localcode` | `/localcode mode` | `/localcode build` | `/localcode plan` | `/localcode status`",
+        response_type: "ephemeral",
+      });
+    }
+  });
+
+  // Handle interactive mode switch button clicks
+  app.action("opencat_act_mode_plan", async ({ ack, body, respond, client }) => {
+    await ack();
+    const channelId = (body as any).channel?.id;
+    if (channelId) {
+      sessionStore.setChannelMode(channelId, "plan");
+    }
+    const messageTs = (body as any).message?.ts;
+    if (channelId && messageTs) {
+      try {
+        await client.chat.update({
+          channel: channelId,
+          ts: messageTs,
+          text: "🧠 Switched to *Plan Mode*",
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: "✅ Active Mode: *Plan Mode* (Read-only analysis & planning)",
+              },
+            },
+          ],
+        });
+        return;
+      } catch {}
+    }
+    await respond({
+      text: "🧠 Switched to *Plan Mode*",
+      replace_original: true,
+    });
+  });
+
+  app.action("opencat_act_mode_build", async ({ ack, body, respond, client }) => {
+    await ack();
+    const channelId = (body as any).channel?.id;
+    if (channelId) {
+      sessionStore.setChannelMode(channelId, "build");
+    }
+    const messageTs = (body as any).message?.ts;
+    if (channelId && messageTs) {
+      try {
+        await client.chat.update({
+          channel: channelId,
+          ts: messageTs,
+          text: "⚡ Switched to *Build Mode*",
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: "✅ Active Mode: *Build Mode* (Code editing & execution enabled)",
+              },
+            },
+          ],
+        });
+        return;
+      } catch {}
+    }
+    await respond({
+      text: "⚡ Switched to *Build Mode*",
+      replace_original: true,
+    });
+  });
+
   // Handle interactive permission approvals from Slack buttons
   app.action("opencat_perm_once", async ({ ack, body, action }) => {
     await ack();
@@ -262,6 +555,7 @@ async function startListener(config: Config) {
     threadTs,
     userId,
     text,
+    rawFiles,
     say,
     client,
   }: {
@@ -270,6 +564,7 @@ async function startListener(config: Config) {
     threadTs: string;
     userId: string;
     text: string;
+    rawFiles?: any[];
     say: (args: any) => Promise<any>;
     client: any;
   }) {
@@ -282,7 +577,7 @@ async function startListener(config: Config) {
       .replace(/<@[A-Z0-9]+>/g, "")
       .trim();
 
-    if (!cleanText) return;
+    if (!cleanText && (!rawFiles || rawFiles.length === 0)) return;
 
     // React with "eyes" to acknowledge receipt immediately
     await safeReaction(client, "add", channel, ts, "eyes");
@@ -291,11 +586,16 @@ async function startListener(config: Config) {
 
     // Command: help
     if (cleanText.toLowerCase() === "help") {
+      const activeMode = sessionStore.getChannelMode(channel);
       const helpText = [
-        "👋 *OpenCat - OpenCode Slack Bridge*",
+        "👋 *OpenCat - Local OpenCode Slack Bridge*",
         "",
         "Send me instructions to control your local OpenCode agent while away!",
+        `• *Active Agent Mode*: \`${activeMode}\` (Use \`/localcode build\` or \`/localcode plan\` to switch)`,
+        "• *OpenCode Commands*: `/localcode mode`, `/localcode build`, `/localcode plan`, `/localcode status`.",
+        "• *LocalCat Commands*: `/localcat reinstall` (Sync & reinstall Slack app manifest).",
         "• *Regular message/thread*: Messages within the same Slack thread share OpenCode session context.",
+        "• *Attachments & Images*: Upload screenshots, logs, or files directly in your message.",
         "• `status` / `what's up`: Instantly check current activity without continuing pending tasks.",
         "• `stop` / `abort`: Instantly stop any running task.",
         "• `todos` / `tasks`: View current session task checklist.",
@@ -362,16 +662,43 @@ async function startListener(config: Config) {
         return;
       }
 
+      // Download any Slack file or image attachments
+      const attachedFiles: Array<{ mime: string; filename?: string; url: string }> = [];
+      if (rawFiles && rawFiles.length > 0) {
+        for (const file of rawFiles) {
+          const downloadUrl = file.url_private_download || file.url_private;
+          if (downloadUrl) {
+            const downloaded = await downloadSlackFileAsBase64(downloadUrl, config.slackBotToken);
+            if (downloaded) {
+              const mime = file.mimetype || downloaded.mimeType;
+              const dataUrl = `data:${mime};base64,${downloaded.base64}`;
+              attachedFiles.push({
+                mime,
+                filename: file.name || file.title || "attachment",
+                url: dataUrl,
+              });
+            }
+          }
+        }
+      }
+
+      const activeAgent = sessionStore.getChannelMode(channel);
+
       // Start Live Progress Card in Slack Thread if enabled
       if (config.liveProgress) {
-        await slackStatusManager.startStatus(channel, threadTs, sessionId, cleanText);
+        const statusSummary = cleanText || (attachedFiles.length > 0 ? `Uploaded ${attachedFiles.length} file(s)` : "Processing...");
+        await slackStatusManager.startStatus(channel, threadTs, sessionId, statusSummary);
       }
 
       // Frame instruction with remote Slack context guardrails
-      const promptWithFraming = `[Remote Slack Instruction from @${userId}]:\n${cleanText}`;
+      const promptText = cleanText || (attachedFiles.length > 0 ? "Please inspect the attached file(s) and provide guidance or action." : "");
+      const promptWithFraming = `[Remote Slack Instruction from @${userId}]:\n${promptText}`;
 
       // Execute prompt in OpenCode
-      const reply = await opencodeService.prompt(sessionId, promptWithFraming);
+      const reply = await opencodeService.prompt(sessionId, promptWithFraming, {
+        agent: activeAgent,
+        files: attachedFiles.length > 0 ? attachedFiles : undefined,
+      });
 
       // Mark Live Status Card as Finished
       if (config.liveProgress) {
@@ -409,12 +736,13 @@ async function startListener(config: Config) {
 
   // Handle DMs and channel messages
   app.message(async ({ message, say, client }) => {
-    // Ignore edits, deletions, bot messages
-    if (message.subtype) return;
+    // Ignore edits, deletions, bot messages (allow file_share subtype)
+    if (message.subtype && message.subtype !== "file_share") return;
     if ("bot_id" in message && message.bot_id) return;
     if ("user" in message && message.user === botUserId) return;
 
     const text = ("text" in message ? message.text : "") || "";
+    const rawFiles = ("files" in message ? (message as any).files : []) || [];
     const channel = message.channel;
     const ts = message.ts;
     const threadTs = ("thread_ts" in message && message.thread_ts ? message.thread_ts : ts) as string;
@@ -435,6 +763,7 @@ async function startListener(config: Config) {
       threadTs,
       userId,
       text,
+      rawFiles,
       say,
       client,
     });
@@ -445,6 +774,7 @@ async function startListener(config: Config) {
     if (event.user === botUserId) return;
 
     const text = event.text || "";
+    const rawFiles = (event as any).files || [];
     const channel = event.channel;
     const ts = event.ts;
     const threadTs = (event.thread_ts || ts) as string;
@@ -456,6 +786,7 @@ async function startListener(config: Config) {
       threadTs,
       userId,
       text,
+      rawFiles,
       say,
       client,
     });

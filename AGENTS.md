@@ -34,6 +34,11 @@ OpenCat intercepts several special intent phrases or commands to manage the acti
 | `stop` / `abort` / `cancel` | **Immediate Halt** | Calls OpenCode's `abort()` API to instantly cancel long-running processes (e.g., terraform apply). |
 | `todos` / `tasks` | **List Checklist** | Queries the current session's tasks and displays them to Slack. |
 | `reset` / `new session` | **Session Reset** | Resets the active Slack thread-to-session mapping so the next instruction starts fresh. |
+| `/localcat reinstall` | **App Reinstall** | Hands-free reinstall/update of the Slack app manifest using Slack CLI & API right from Slack. |
+| `/localcode build` | **Build Mode** | Enables code editing and full tool execution for this channel. |
+| `/localcode plan` | **Plan Mode** | Sets agent to read-only analysis and architectural planning. |
+| `/localcode mode` | **Mode Selector** | Pops up interactive Slack buttons to switch between Plan and Build modes. |
+| `/localcode status` | **Status** | Reports OpenCode daemon connectivity and active channel mode. |
 | `help` | **Display Help** | Returns a helpful commands card. |
 
 ---

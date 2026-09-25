@@ -404,6 +404,37 @@ async function testConfigPrecedence() {
   }
 }
 
+async function testSessionStoreChannelModes() {
+  console.log("🧪 Testing SessionStore channel mode switching & persistence...");
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const os = await import("node:os");
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "opencat-test-"));
+  const tempSessionsPath = path.join(tempDir, "sessions.json");
+  const { SessionStore } = await import("../src/session-store.ts");
+  const testStore = new SessionStore(tempSessionsPath);
+
+  // Default mode should be "build"
+  assert.strictEqual(testStore.getChannelMode("C12345"), "build");
+
+  // Set mode to plan
+  testStore.setChannelMode("C12345", "plan");
+  assert.strictEqual(testStore.getChannelMode("C12345"), "plan");
+
+  // Verify persistence in new instance
+  const reloadedStore = new SessionStore(tempSessionsPath);
+  assert.strictEqual(reloadedStore.getChannelMode("C12345"), "plan");
+
+  // Switch back to build
+  reloadedStore.setChannelMode("C12345", "build");
+  assert.strictEqual(reloadedStore.getChannelMode("C12345"), "build");
+
+  // Cleanup
+  fs.rmSync(tempDir, { recursive: true, force: true });
+  console.log("✅ SessionStore channel modes verified successfully!");
+}
+
 async function runAll() {
   console.log("==================================================");
   console.log("      🐱 OpenCat Comprehensive Verification       ");
@@ -416,6 +447,7 @@ async function runAll() {
   await testGuideTree();
   testCliOptionAliases();
   await testConfigPrecedence();
+  await testSessionStoreChannelModes();
   await testLiveOpenCode();
 
   console.log("\n🎉 All OpenCat components passed verification!");

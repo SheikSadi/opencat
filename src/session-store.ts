@@ -4,14 +4,18 @@ import { getConfigDir } from "./config.ts";
 
 export class SessionStore {
   private cache = new Map<string, string>();
+  private channelModes = new Map<string, "build" | "plan">();
   private filePath: string;
+  private modesFilePath: string;
 
   constructor(customPath?: string) {
     if (customPath) {
       this.filePath = customPath;
+      this.modesFilePath = path.join(path.dirname(customPath), "channel-modes.json");
     } else {
       const configDir = getConfigDir();
       this.filePath = path.join(configDir, "sessions.json");
+      this.modesFilePath = path.join(configDir, "channel-modes.json");
     }
     this.init();
   }
@@ -29,6 +33,20 @@ export class SessionStore {
       }
     } catch (err) {
       console.warn("⚠️ Warning: Failed to load sessions from file:", err);
+    }
+
+    try {
+      if (fs.existsSync(this.modesFilePath)) {
+        const raw = fs.readFileSync(this.modesFilePath, "utf-8");
+        const json = JSON.parse(raw);
+        for (const [k, v] of Object.entries(json)) {
+          if (v === "build" || v === "plan") {
+            this.channelModes.set(k, v);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("⚠️ Warning: Failed to load channel modes from file:", err);
     }
   }
 
@@ -70,6 +88,19 @@ export class SessionStore {
     } catch (err) {
       console.error("❌ Failed to persist sessions:", err);
     }
+
+    try {
+      const modeObj: Record<string, string> = {};
+      for (const [k, v] of this.channelModes.entries()) {
+        modeObj[k] = v;
+      }
+      fs.writeFileSync(this.modesFilePath, JSON.stringify(modeObj, null, 2), {
+        encoding: "utf-8",
+        mode: 0o600,
+      });
+    } catch (err) {
+      console.error("❌ Failed to persist channel modes:", err);
+    }
   }
 
   get(key: string): string | undefined {
@@ -90,6 +121,17 @@ export class SessionStore {
       this.persist();
     }
     return deleted;
+  }
+
+  getChannelMode(channelId: string): "build" | "plan" {
+    this.load();
+    return this.channelModes.get(channelId) || "build";
+  }
+
+  setChannelMode(channelId: string, mode: "build" | "plan"): void {
+    this.load();
+    this.channelModes.set(channelId, mode);
+    this.persist();
   }
 }
 
